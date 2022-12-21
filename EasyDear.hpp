@@ -1,6 +1,9 @@
 #pragma once
 
 #include <imgui.h>
+#include <memory>
+#include <vector>
+#include <functional>
 
 namespace hl
 {
@@ -22,9 +25,9 @@ namespace hl
         {
         private:
             std::vector<GuiObject> m_objects;
+            std::string m_name;
             bool m_open = true;
             ImGuiWindowFlags m_flags = 0;
-            std::string m_name;
 
         public:
             Window(const std::string& name, bool open = true, ImGuiWindowFlags flags = 0)
@@ -32,14 +35,14 @@ namespace hl
             {
             }
 
-            virtual ~Window() = default;
+            ~Window() = default;
 
-            virtual void update() override
+            void update()
             {
                 ImGui::Begin(m_name.c_str(), &m_open, m_flags);
                 for (auto& object : m_objects)
                 {
-                    object.update();
+                    object->update();
                 }
                 ImGui::End();
             }
@@ -124,8 +127,7 @@ namespace hl
                 {
                     for (auto& item : m_items)
                     {
-                        if (item.is_valid())
-                            item.update();
+                        item->update();
                     }
 
                     ImGui::EndMenu();
@@ -161,7 +163,7 @@ namespace hl
                 {
                     for (auto& menu : m_menus)
                     {
-                        menu.update();
+                        menu->update();
                     }
 
                     ImGui::EndMenuBar();
@@ -186,11 +188,11 @@ namespace hl
         {
         private:
             std::string m_name;
-            ImGui::ImVec4 *m_color;
+            ImVec4 *m_color;
             
         
         public:
-            ColorEdit(const std::string& name, ImGui::ImVec4 *color)
+            ColorEdit(const std::string& name, ImVec4 *color)
                 : m_name(name), m_color(color)
             {
             }
@@ -206,7 +208,7 @@ namespace hl
                 return *this;
             }
 
-            ColorEdit& set_color(ImGui::ImVec4 *color)
+            ColorEdit& set_color(ImVec4 *color)
             {
                 m_color = color;
                 return *this;
@@ -340,48 +342,17 @@ namespace hl
             }
         };
 
-        class TextColored : public Object
-        {
-        private:
-            std::string m_text;
-            ImGui::ImVec4 m_color;
-        
-        public:
-            TextColored(const std::string& text, const ImGui::ImVec4& color)
-                : m_text(text), m_color(color)
-            {
-            }
-
-            virtual void update() override
-            {
-                ImGui::TextColored(m_color, m_text.c_str());
-            }
-
-            TextColored& set_text(const std::string& text)
-            {
-                m_text = text;
-                return *this;
-            }
-
-            TextColored& set_color(const ImGui::ImVec4& color)
-            {
-                m_color = color;
-                return *this;
-            }
-        };
-
-        using GuiTextColored = std::shared_ptr<TextColored>;
-        using GuiTextColoredPtr = TextColored *;
-
         class Text : public Object
         {
         private:
             std::string *m_text;
+            float rgba[4];
         
         public:
-            Text(std::string *text)
+            Text(std::string *text, float r, float g, float b, float a)
                 : m_text(text)
             {
+                set_color(r, g, b, a);
             }
 
             virtual void update() override
@@ -394,6 +365,19 @@ namespace hl
                 m_text = text;
                 return *this;
             }
+
+            void set_color(float r, float g, float b, float a)
+            {
+                rgba[0] = r;
+                rgba[1] = g;
+                rgba[2] = b;
+                rgba[3] = a;
+            }
+
+            float *get_color()
+            {
+                return rgba;
+            }
         };
 
         using GuiText = std::shared_ptr<Text>;
@@ -402,26 +386,25 @@ namespace hl
         class Logger : public Object
         {
         private:
-            ImGui::ImVec4 m_color;
             size_t m_max_lines = 0;
             std::vector<GuiText> m_lines;
+            float rgba[4];
 
         public:
-            Logger(const ImGui::ImVec4& color)
-                : m_text(text), m_color(color)
+            Logger(float r, float g, float b, float a)
             {
+                set_color(r, g, b, a);
             }
 
-            Logger& set_color(const ImGui::ImVec4& color)
+            Logger& set_color(float r, float g, float b, float a)
             {
-                if (m_color == color)
-                {
-                    return *this;
-                }
-                m_color = color;
+                rgba[0] = r;
+                rgba[1] = g;
+                rgba[2] = b;
+                rgba[3] = a;
                 for (auto& line : m_lines)
                 {
-                    line->set_color(m_color);
+                    line->set_color(r, g, b, a);
                 }
                 return *this;
             }
@@ -434,9 +417,8 @@ namespace hl
 
             Logger& add_text(const std::string& text)
             {
-                auto text = std::make_shared<std::string>(text);
-                text->set_color(m_color);
-                m_lines.push_back(text);
+                auto stext = std::make_shared<Text>(new std::string(text), rgba[0], rgba[1], rgba[2], rgba[3]);
+                m_lines.push_back(stext);
                 if (m_max_lines != 0 && m_lines.size() > m_max_lines)
                 {
                     m_lines.erase(m_lines.begin());
@@ -585,14 +567,15 @@ namespace hl
         {
         private:
             std::string m_name;
-            char *m_text = nullptr;
             size_t m_max_length = 0;
+            char *m_text = nullptr;
             ImGuiInputTextFlags m_flags = 0;
 
         public:
             InputText(const std::string& name, size_t max_length, const std::string& default_value = "")
                 : m_name(name), m_max_length(max_length), m_text(new char[max_length + 1])
             {
+                set_value(default_value);
             }
 
             virtual void update() override
@@ -606,11 +589,12 @@ namespace hl
                 return *this;
             }
 
-            InputText& set_value(std::string *value)
+            InputText& set_value(const std::string& value)
             {
-                size_t max_copy = std::min(default_value.size(), m_max_length);
-                memcpy(m_text, default_value.c_str(), max_copy);
+                size_t max_copy = std::min(value.size(), m_max_length);
+                memcpy(m_text, value.c_str(), max_copy);
                 m_text[max_copy] = '\0';
+                return *this;
             }
 
             InputText& set_max_length(size_t max_length)
@@ -732,9 +716,7 @@ namespace hl
                 memcpy(cstr, item.c_str(), item.size());
                 cstr[item.size()] = '\0';
 
-                auto it = std::lower_bound(m_items.begin(), m_items.end(), cstr, [](const char *a, const char *b) {
-                    return strcmp(a, b) < 0;
-                });
+                m_items.push_back(cstr);
                 return *this;
             }
 
@@ -751,6 +733,9 @@ namespace hl
 
             const char *get_current_item() const
             {
+                if ((unsigned int)m_current_item >= m_items.size()) {
+                    return nullptr;
+                }
                 return m_items[m_current_item];
             }
 
@@ -773,14 +758,13 @@ namespace hl
         private:
             std::string m_name;
             InputText m_input_text;
-            Combo m_combo;
+            std::vector<std::string> m_items;
             Combo m_filtered_combo;
         
         public:
             FuzzyCombo(const std::string& name, int current_item = 0)
                 : m_name(name)
                 , m_input_text(name, 256)
-                , m_combo(name, current_item)
                 , m_filtered_combo(name, current_item)
             {
             }
@@ -790,9 +774,9 @@ namespace hl
                 return m_input_text;
             }
 
-            Combo& get_combo()
+            void set_items(const std::vector<std::string>& items)
             {
-                return m_combo;
+                m_items = items;
             }
 
             virtual void update() override
@@ -803,42 +787,57 @@ namespace hl
                 std::string input_text = m_input_text.get_text();
                 std::transform(input_text.begin(), input_text.end(), input_text.begin(), ::tolower);
 
-                m_filtered_combo.clear();
-
                 static const float SCORE_EQUAL = 10;
                 static const float SCORE_NOT_SAME = -15;
-                static const float SCORE_NOT_SAME_LENGTH = -30;
-                std::vector<std::string> valids;
 
-                for (auto& item : m_combo.get_items()) {
+                std::vector<std::pair<std::string, float>> valids;
+
+                for (auto& item : m_items) {
                     float score = 0;
+                    float max_score = SCORE_EQUAL * std::min(input_text.size(), item.size());
                     std::string item_str = item;
-                    float max_score = SCORE_EQUAL * item_str.size();
 
                     std::transform(item_str.begin(), item_str.end(), item_str.begin(), ::tolower);
+                    // fuzzy search
                     for (size_t i = 0; i < input_text.size(); i++) {
-                        if (i > item_str.size()) {
-                            score += SCORE_NOT_SAME_LENGTH;
-                        } else if (input_text[i] == item_str[i]) {
+                        char c = input_text[i];
+                        auto it = std::find(item_str.begin(), item_str.end(), c);
+                        if (it != item_str.end()) {
                             score += SCORE_EQUAL;
+                            item_str.erase(it);
                         } else {
                             score += SCORE_NOT_SAME;
                         }
                     }
-
                     float score_percent = score / max_score;
-                    if (score_percent > 0.6) {
-                        valids.push_back(item_str);
+                    if (score_percent > 0.60f) {
+                        auto it = std::find_if(valids.begin(), valids.end(), [&](const std::pair<std::string, float>& p) {
+                            return p.second < score_percent;
+                        });
+                        if (it != valids.end()) {
+                            valids.insert(it, std::make_pair(item, score_percent));
+                        } else {
+                            valids.push_back(std::make_pair(item, score_percent));
+                        }
                     }
                 }
 
-                m_filtered_combo.add_items(valids);
+                m_filtered_combo.clear();
+                for (auto& item : valids) {
+                    m_filtered_combo.add_item(item.first);
+                }
+                m_filtered_combo.set_current_item_index(0);
                 m_filtered_combo.update();
 
                 ImGui::EndGroup();
             }
-        }
-        
+
+            Combo& get_filtered_combo()
+            {
+                return m_filtered_combo;
+            }
+        };
+
         using GuiFuzzyCombo = std::shared_ptr<FuzzyCombo>;
         using GuiFuzzyComboPtr = FuzzyCombo *;
 
