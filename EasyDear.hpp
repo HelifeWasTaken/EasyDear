@@ -58,7 +58,7 @@ namespace hl
         };
 
         using GuiWindow = std::shared_ptr<Window>;
-        using GuiWindow = Window *;
+        using GuiWindowPtr = Window *;
 
         class MenuItem : public Object
         {
@@ -452,6 +452,9 @@ namespace hl
                 }
             }
         };
+        
+        using GuiLogger = std::shared_ptr<Logger>;
+        using GuiLoggerPtr = Logger *;
 
         class Button : public Object
         {
@@ -762,6 +765,9 @@ namespace hl
             }
         };
         
+        using GuiCombo = std::shared_ptr<Combo>;
+        using GuiComboPtr = Combo *;
+        
         class FuzzyCombo : public Object
         {
         private:
@@ -831,7 +837,10 @@ namespace hl
 
                 ImGui::EndGroup();
             }
-        };
+        }
+        
+        using GuiFuzzyCombo = std::shared_ptr<FuzzyCombo>;
+        using GuiFuzzyComboPtr = FuzzyCombo *;
 
         class Child : public Object
         {
